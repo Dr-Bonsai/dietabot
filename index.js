@@ -2,20 +2,22 @@ const Discord = require("discord.js");
 const path = require("path");
 const fs = require("fs");
 const client = new Discord.Client();
-const dir = path.join(__dirname, "sesiones");
 const linter = 3000;
 const minter = 2000;
 const sinter = 1000;
+const prefix = "!";
+const dir = "./sesiones/";
+const dirpath = path.join(__dirname,'sesiones');
 const logChannel = "623475133041868802";
-const apiToken = "NTMzNjU1OTk5Mzk1OTIxOTI0.XYHhuQ.4LHlQu9l0Qd7FlfQ88NQ_aKKE8A";
-const sesiones = [];
+const apiToken = "NTMzNjU1OTk5Mzk1OTIxOTI0.XYMkQA.ZD1gc6_PygEcD6wkG3tNiR-uk0s";
 const helptxt = 'Texto de ayuda to currao (Hay que hacerlo)';
+const sesiones = [];
 var sesion = new Object();
 var generalChannel = new Object();
 //---------------------------------- Sesiones ----------------------------------
 
 //Generamos el array de archivos de sesiones
-fs.readdir(dir, function(err, files) {
+fs.readdir(dirpath, function(err, files) {
   //En caso de error
   if (err) {
     return console.log("Unable to scan directory: " + err);
@@ -71,17 +73,17 @@ function checksessions(){
   client.guilds.forEach(servidor => {
     if (sesiones.includes(servidor.id + ".json")) {
 
-      
-      fs.readFile("./sesiones/" + servidor.id + ".json","utf8",(err, jsonString) => {
+      fs.readFileSync(dir + servidor.id + ".json","utf8",(err, jsonString) => {
           if (err) {
             console.log("Fallo de lectura:", err);
             return;
           }
           sesion = JSON.parse(jsonString);
-          generalChannel.send("["+servidor.name+"]"+"- [Enable]=" + sesion.enable + " [Día]=" + sesion.dia).then(msg => {msg.delete(linter);});
-          console.log("[ "+servidor.name +" ] " +"- [Enable]=" +sesion.enable +" [Día]=" +sesion.dia);
         }
       );
+
+      generalChannel.send("["+servidor.name+"]"+"- [Enable]=" + sesion.enable + " [Día]=" + sesion.dia).then(msg => {msg.delete(linter);});
+      console.log("[ "+servidor.name +" ] " +"- [Enable]=" +sesion.enable +" [Día]=" +sesion.dia);
 
     } else {
 
@@ -91,13 +93,10 @@ function checksessions(){
       sesion.players = [];
       sesion.dia = 0;
       sesion.string;
-      fs.writeFile("./sesiones/" + servidor.id + ".json",JSON.stringify(sesion),"utf8",err => {
-        if (err) throw err;
-        generalChannel.send("["+servidor.name+"]"+"  Archivo creado").then(msg => {msg.delete(linter);});
-        }
-      );
+      fs.writeFileSync(dir + servidor.id + ".json",JSON.stringify(sesion),"utf8",err => {if (err) throw err;});
+      generalChannel.send("["+servidor.name+"]"+"  Archivo creado").then(msg => {msg.delete(linter);});
       console.log("["+servidor.name+"]"+"  Archivo creado");
-      fs.readFile("./sesiones/" + servidor.id + ".json","utf8",(err, jsonString) => {
+      fs.readFileSync(dir + servidor.id + ".json","utf8",(err, jsonString) => {
           if (err) {
             console.log("Fallo de lectura:", err);
             return;
@@ -119,12 +118,12 @@ client.on("message", receivedMessage => {
     return;
   }
 
-  if (
-    receivedMessage.content.startsWith("!") &&
-    receivedMessage.channel.name == "losjuegosdeladieta"
-  ) {
+  if (receivedMessage.content.startsWith(prefix) && receivedMessage.channel.name == "losjuegosdeladieta") {
     processCommand(receivedMessage);
-    receivedMessage.delete(sinter);
+    receivedMessage.delete(1000);
+  } else if(receivedMessage.content == prefix + "participar" ){
+    enablePlayer(receivedMessage);
+    receivedMessage.delete(1000);
   }
 });
 
@@ -145,8 +144,17 @@ function processCommand(receivedMessage) {
   }
 
   //Comando habilitar
-  if (primaryCommand = "enable"){
+  if (primaryCommand == "activar"){
     enableCommand(receivedMessage);
+  }
+
+  //Comando deshabilitar
+  if (primaryCommand == "desactivar"){
+    disableCommand(receivedMessage);
+  }
+
+  if (primaryCommand == "participar"){
+      enablePlayer(receivedMessage);
   }
 
 }
@@ -160,38 +168,90 @@ function helpCommand(arguments, receivedMessage) {
 }
 
 function enableCommand(receivedMessage) {
-  fs.readFile("./sesiones/" + receivedMessage.guild.id + ".json","utf8",(err, jsonString) => {
-    if (err) {
-      console.log("Fallo de lectura:", err);
-      return;
-    }
-      sesion = JSON.parse(jsonString);
-      generalChannel.send("["+receivedMessage.guild.name+"]"+"- [Enable]=" + sesion.enable + " [Día]=" + sesion.dia).then(msg => {msg.delete(linter);});
-      console.log("[ "+receivedMessage.guild.name +" ] " +"- [Enable]=" +sesion.enable +" [Día]=" +sesion.dia);
-  });
-  
+  //Obtener sesión
+  get_sesion(receivedMessage.guild.id);
   //Activar la sesión
   sesion.enable = true;
-
+  //Guardar la sesión si players >4
   if(sesion.players.length < 5){
     //Excepción no hay suficientes jugadores registrados
-    generalChannel.send("No hay suficientes jugadores registrados").then(msg=>{msg.delete(linter)});
+    receivedMessage.channel.send("No hay suficientes jugadores registrados").then(msg=>{msg.delete(linter)});
     console.log("No hay suficientes jugadores registrados");
 
   } else {
-    fs.writeFile("./sesiones/" + receivedMessage.guild.id + ".json",JSON.stringify(sesion),"utf8",err => {
-      if (err) throw err;
-      generalChannel.send("["+servidor.name+"]"+"  Archivo creado").then(msg => {msg.delete(linter);});
-    });
-    generalChannel.send("Los juegos del hambre han sido habilitados");
+    set_sesion(receivedMessage.guild.id);
+    receivedMessage.channel.send("Los juegos del hambre han sido habilitados").then(msg=>{msg.delete(linter)});
+    console.log("[ " + receivedMessage.guild.name + " ] - Sesión habilitada");
+    presentation(receivedMessage);
   }
+}
+
+function disableCommand(receivedMessage) {
+  //Obtener sesión
+  get_sesion(receivedMessage.guild.id);
+  //Deshabilitar sesión
+  sesion = false;
+  //Guardar sesión
+  set_sesion(receivedMessage.guild.id);
+  receivedMessage.channel.send("Se han deshabilitado los juegos del hambre").then(msg => {msg.delete(linter);});
+  console.log("[ " + receivedMessage.guild.name + " ] - Sesión deshabilitada");
+}
+
+function enablePlayer(receivedMessage) {
+  //Obtener la sesión
+  get_sesion(receivedMessage.guild.id);
+  //Setear el jugador si no está en la lista
+  if(sesion.players.includes(receivedMessage.author.id)){
+    receivedMessage.channel.send("Ya estabas participando: "+ " [" + receivedMessage.author.username + "]").then(msg => {msg.delete(linter);});
+    console.log("["+receivedMessage.guild.name+"]"+" - " + sesion.players);
+  } else {
+    console.log("["+receivedMessage.guild.name+"]"+" - " + sesion.players);
+    sesion.players.push(receivedMessage.author.id);
+    receivedMessage.channel.send("[" + receivedMessage.author.username + "] Ahora participa en los juegos de la dieta.");
+    console.log("["+receivedMessage.author.username+"] Ahora participa en los juegos de la dieta.");
   }
+  //Guardar la sesión
+  set_sesion(receivedMessage.guild.id);
+}
 
+function diablePlayer(receivedMessage) {
+  //Obtener la sesión
+  get_sesion(receivedMessage.guild.id);
+  //Setear el jugador si no está en la lista
+  if(sesion.players.includes(receivedMessage.author.id)){
+    for( var i = 0; i < sesion.players.length; i++){ 
+      if ( arr[i] === 5) {
+        arr.splice(i, 1); 
+      }
+   }
+    receivedMessage.channel.send("[" + receivedMessage.author.username + "] Ahora participa en los juegos de la dieta.");
+    console.log("["+receivedMessage.author.username+"] Ahora participa en los juegos de la dieta.");
+  } else {
+    
+  }
+  //Guardar la sesión
+  set_sesion(receivedMessage.guild.id);
+}
 
-//---------------------------------- Events   ----------------------------------
+//---------------------------------- Eventos  ----------------------------------
 
-function presentation(){
+function presentation(receivedMessage){
 
+}
+
+//----------------------------- Gestion Sesión ---------------------------------
+
+function get_sesion(id){
+  let string = fs.readFileSync(dir + id + ".json","utf8",(err, jsonString) => {
+    if (err) {console.log("Fallo de lectura:", err);}
+  });
+  sesion = JSON.parse(string);
+}
+
+function set_sesion(id){
+  fs.writeFileSync(dir + id + ".json",JSON.stringify(sesion),"utf8",err => {
+    if (err) throw err;
+  });
 }
 
 //---------------------------------- Loginbot ----------------------------------
